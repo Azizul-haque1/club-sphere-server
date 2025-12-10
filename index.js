@@ -142,6 +142,17 @@ async function run() {
 
     // club apis
 
+    // get clubs api
+    app.get("/clubs", async (req, res) => {
+      const email = req.query.email;
+      // const query = { email };
+      const result = await clubsCollection
+        .find()
+        .sort({ createdAt: -1 })
+        .toArray();
+      res.send(result);
+    });
+    // post api club
     app.post("/clubs", async (req, res) => {
       const club = req.body;
       club.createdAt = new Date();
@@ -149,6 +160,8 @@ async function run() {
       const result = await clubsCollection.insertOne(club);
       res.send(result);
     });
+
+    //
 
     await client.db("admin").command({ ping: 1 });
     console.log(
