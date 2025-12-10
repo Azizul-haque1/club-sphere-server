@@ -152,12 +152,27 @@ async function run() {
         .toArray();
       res.send(result);
     });
+
     // post api club
     app.post("/clubs", async (req, res) => {
       const club = req.body;
       club.createdAt = new Date();
       club.status = "pending";
       const result = await clubsCollection.insertOne(club);
+      res.send(result);
+    });
+
+    // patch club data
+    app.patch("/clubs/:id/status", async (req, res) => {
+      const id = req.params.id;
+      const status = req.body.status;
+      const query = { _id: new ObjectId(id) };
+      const updateDoc = {
+        $set: {
+          status: status,
+        },
+      };
+      const result = await clubsCollection.updateOne(query, updateDoc);
       res.send(result);
     });
 
