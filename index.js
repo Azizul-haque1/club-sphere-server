@@ -28,9 +28,26 @@ admin.initializeApp({
 // verifyFirebase admin
 
 const verifyFBAdmin = async (req, res, next) => {
-  console.log(req.headers);
+  const authorization = req.headers.authorization;
+  if (!authorization) {
+    return res.status(401).send({ message: "unauthorized access" });
+  }
 
-  next();
+  const token = authorization.split(" ")[1];
+  if (!token) {
+    return res.status(401).send({ message: "unauthorized access" });
+  }
+
+  try {
+    const decodedToken = await admin.auth().verifyIdToken(token);
+    // console.log(decodedToken);
+    req.decodedEmail = decodedToken.email;
+    console.log(req.decodedEmail);
+    next();
+  } catch (error) {
+    console.error("Error verifying ID token:", error);
+    return res.status(403).send("Invalid or expired token.");
+  }
 };
 
 async function run() {
@@ -44,10 +61,19 @@ async function run() {
 
     // get user role
 
-    app.get("/users/:email/role", async (req, res) => {
+    app.get("/usesr/test", verifyFBAdmin, (req, res) => {
+      res.send("text ok");
+    });
+
+    app.get("/users/:email/role", verifyFBAdmin, async (req, res) => {
       const email = req.params.email;
       const query = { email };
       const result = await usersCollection.findOne(query);
+      res.send(result);
+    });
+
+    app.get("/users", async (req, res) => {
+      const result = await usersCollection.find().toArray();
       res.send(result);
     });
 
