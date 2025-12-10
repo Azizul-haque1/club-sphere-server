@@ -4,7 +4,7 @@ const express = require("express");
 const cors = require("cors");
 const app = express();
 const port = process.env.PORT || 3000; // Access variables via process.env
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 
 const serviceAccount = JSON.parse(process.env.FIREBASE_ADMIN_KEY);
 // middleware
@@ -42,7 +42,6 @@ const verifyFBAdmin = async (req, res, next) => {
     const decodedToken = await admin.auth().verifyIdToken(token);
     // console.log(decodedToken);
     req.decodedEmail = decodedToken.email;
-    console.log(req.decodedEmail);
     next();
   } catch (error) {
     console.error("Error verifying ID token:", error);
@@ -87,6 +86,24 @@ async function run() {
       const result = await usersCollection.findOne(query);
       res.send(result);
     });
+
+    // change role only admin
+    app.patch(
+      "/users/:id/role",
+      verifyFBAdmin,
+      verifyAdminRole,
+      async (req, res) => {
+        const id = req.params.id;
+        const role = req.body.role;
+        const query = { _id: new ObjectId(id) };
+        const updateDoc = {
+          $set: { role: role },
+        };
+
+        const result = await usersCollection.updateOne(query, updateDoc);
+        res.send(result);
+      }
+    );
 
     app.get("/users", verifyFBAdmin, verifyAdminRole, async (req, res) => {
       const result = await usersCollection.find().toArray();
