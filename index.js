@@ -25,8 +25,8 @@ const client = new MongoClient(uri, {
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
 });
-// verifyFirebase admin
 
+// verifyFirebase admin
 const verifyFBAdmin = async (req, res, next) => {
   const authorization = req.headers.authorization;
   if (!authorization) {
@@ -59,20 +59,36 @@ async function run() {
     const db = client.db("club_sphere_db");
     const usersCollection = db.collection("users");
 
-    // get user role
+    // admin role verify
+    const verifyAdminRole = async (req, res, next) => {
+      const email = req.decodedEmail;
+      const query = { email };
+      const user = await usersCollection.findOne(query);
+      if (!user || user.role !== "admin") {
+        return res.status(403).send({ message: "forbidden access" });
+      }
+      next();
+    };
 
+    // test api
     app.get("/usesr/test", verifyFBAdmin, (req, res) => {
       res.send("text ok");
     });
 
+    // get user role
     app.get("/users/:email/role", verifyFBAdmin, async (req, res) => {
       const email = req.params.email;
+
+      if (req.decodedEmail !== email) {
+        return res.status(403).send({ message: "forbidden access" });
+      }
+
       const query = { email };
       const result = await usersCollection.findOne(query);
       res.send(result);
     });
 
-    app.get("/users", async (req, res) => {
+    app.get("/users", verifyFBAdmin, verifyAdminRole, async (req, res) => {
       const result = await usersCollection.find().toArray();
       res.send(result);
     });
