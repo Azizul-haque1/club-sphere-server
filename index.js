@@ -55,8 +55,11 @@ async function run() {
     await client.connect();
     // Send a ping to confirm a successful connection
 
+    // database and data collections
+
     const db = client.db("club_sphere_db");
     const usersCollection = db.collection("users");
+    const clubsCollection = db.collection("clubs");
 
     // admin role verify
     const verifyAdminRole = async (req, res, next) => {
@@ -135,6 +138,16 @@ async function run() {
         console.error(error);
         res.status(500).send({ message: "Server error" });
       }
+    });
+
+    // club apis
+
+    app.post("/clubs", async (req, res) => {
+      const club = req.body;
+      club.createdAt = new Date();
+      club.status = "pending";
+      const result = await clubsCollection.insertOne(club);
+      res.send(result);
     });
 
     await client.db("admin").command({ ping: 1 });
