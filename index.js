@@ -153,6 +153,22 @@ async function run() {
       res.send(result);
     });
 
+    // get api for creator clubs
+
+    app.get("/clubs/by-creator", async (req, res) => {
+      const { email, status } = req.query;
+      const query = {};
+      if (email) {
+        query.managerEmail = email;
+      }
+      if (status) {
+        query.status = status;
+      }
+
+      const result = await clubsCollection.find(query).toArray();
+      res.send(result);
+    });
+
     // post api club
     app.post("/clubs", async (req, res) => {
       const club = req.body;
