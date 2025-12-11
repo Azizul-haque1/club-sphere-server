@@ -1,9 +1,11 @@
 require("dotenv").config();
+
 var admin = require("firebase-admin");
 const express = require("express");
 const cors = require("cors");
 const app = express();
-const port = process.env.PORT || 3000; // Access variables via process.env
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
+const port = process.env.PORT || 3000;
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 
 const serviceAccount = JSON.parse(process.env.FIREBASE_ADMIN_KEY);
@@ -144,10 +146,13 @@ async function run() {
 
     // get clubs api
     app.get("/clubs", async (req, res) => {
-      const email = req.query.email;
-      // const query = { email };
+      const status = req.query.status;
+      const query = {};
+      if (status) {
+        query.status = status;
+      }
       const result = await clubsCollection
-        .find()
+        .find(query)
         .sort({ createdAt: -1 })
         .toArray();
       res.send(result);
@@ -167,6 +172,44 @@ async function run() {
 
       const result = await clubsCollection.find(query).toArray();
       res.send(result);
+    });
+
+    app.get("/clubs/:id/details", async (req, res) => {
+      try {
+        const id = req.params.id;
+        const pipeline = [
+          {
+            $match: { _id: new ObjectId(id) },
+          },
+          {
+            $lookup: {
+              from: "users",
+              localField: "managerEmail",
+              foreignField: "email",
+              as: "organizer",
+            },
+          },
+          {
+            $project: {
+              "organizer.photoURL": 0,
+              "organizer._id": 0,
+              "organizer.role": 0,
+              "organizer.createdAt": 0,
+              updatedAt: 0,
+            },
+          },
+          { $unwind: "$organizer" },
+        ];
+
+        const result = await clubsCollection.aggregate(pipeline).toArray();
+
+        if (!result.length) {
+          return res.status(404).send({ message: "Club not found" });
+        }
+        res.send(result[0]);
+      } catch (error) {
+        res.status(500).send({ error: "Error fetching club details" });
+      }
     });
 
     // post api club
