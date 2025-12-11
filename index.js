@@ -62,6 +62,7 @@ async function run() {
     const db = client.db("club_sphere_db");
     const usersCollection = db.collection("users");
     const clubsCollection = db.collection("clubs");
+    const membershipsCollection = db.collection("memberships");
 
     // admin role verify
     const verifyAdminRole = async (req, res, next) => {
@@ -262,7 +263,73 @@ async function run() {
       res.send(result);
     });
 
-    //
+    //payment releted api
+
+    app.post("/payment-checkout-session", async (req, res) => {
+      const clubInfo = req.body;
+      const amount = parseInt(clubInfo.membershipFee) * 100;
+      const session = await stripe.checkout.sessions.create({
+        line_items: [
+          {
+            // Provide the exact Price ID (for example, price_1234) of the product you want to sell
+            price_data: {
+              currency: "USD",
+              product_data: {
+                name: clubInfo.name,
+              },
+              unit_amount: amount,
+            },
+            quantity: 1,
+          },
+        ],
+        customer_email: clubInfo.email,
+        metadata: {
+          clubId: clubInfo._id,
+          clubName: clubInfo.clubName,
+        },
+        mode: "payment",
+        success_url: `${process.env.SITE_DOMAIN}/dashboard/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${process.env.SITE_DOMAIN}/dashboard/canlelled`,
+      });
+
+      // console.log(session)
+      res.send({ url: session.url });
+    });
+
+    app.get("/session-status", async (req, res) => {
+      const session = await stripe.checkout.sessions.retrieve(
+        req.query.session_id
+      );
+
+      if (session.payment_status === "paid") {
+        const existing = await membershipsCollection.findOne({
+          paymentId: session.payment_intent,
+        });
+
+        if (session.payment_status === "paid") {
+          if (!existing) {
+            console.log("sesstion retrieve:", session);
+            const memberInfo = {
+              userEmail: session.customer_email,
+              clubId: session.metadata.clubId,
+              status: "active",
+              paymentStatus: session.payment_status,
+              paymentId: session.payment_intent,
+              joinedAt: new Date(),
+            };
+
+            const result = await membershipsCollection.insertOne(memberInfo);
+            console.log(memberInfo);
+          }
+        }
+      }
+
+      res.send({
+        status: session.status,
+        clubName: session.metadata.clubName,
+        amount: session.amount_total / 100,
+      });
+    });
 
     await client.db("admin").command({ ping: 1 });
     console.log(
