@@ -178,7 +178,34 @@ async function run() {
       res.send(result);
     });
 
-    // patch club data
+    // club data update api
+    app.patch("/clubs/:id", async (req, res) => {
+      const id = req.params.id;
+      const {
+        clubName,
+        description,
+        category,
+        location,
+        bannerImage,
+        membershipFee,
+      } = req.body;
+      const query = { _id: new ObjectId(id) };
+      const updateDoc = {
+        $set: {
+          clubName: clubName,
+          description: description,
+          category: category,
+          location: location,
+          bannerImage: bannerImage,
+          membershipFee: Number(membershipFee),
+          updatedAt: new Date(),
+        },
+      };
+      const result = await clubsCollection.updateOne(query, updateDoc);
+      res.send(result);
+    });
+
+    // patch club status
     app.patch("/clubs/:id/status", async (req, res) => {
       const id = req.params.id;
       const status = req.body.status;
