@@ -54,7 +54,7 @@ const verifyFBAdmin = async (req, res, next) => {
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
-    // await client.connect();
+    await client.connect();
     // Send a ping to confirm a successful connection
 
     // database and data collections
@@ -84,13 +84,18 @@ async function run() {
     app.get("/users/:email/role", verifyFBAdmin, async (req, res) => {
       const email = req.params.email;
 
-      if (req.decodedEmail !== email) {
-        return res.status(403).send({ message: "forbidden access" });
+      if (email !== req.decodedEmail) {
+        return res.status(403).send({ message: "Forbidden access" });
       }
 
-      const query = { email };
-      const result = await usersCollection.findOne(query);
-      res.send(result);
+      const query = { email: email };
+      const user = await usersCollection.findOne(query);
+      console.log(user);
+
+      if (!user) {
+        return res.status(404).send({ message: "User not found" });
+      }
+      res.send({ role: user?.role || "member" });
     });
 
     // change role only admin
@@ -134,9 +139,7 @@ async function run() {
 
         const result = await usersCollection.insertOne(user);
 
-        res
-          .status(201)
-          .send({ message: "User created", userId: result.insertedId });
+        res.status(201).send(result);
       } catch (error) {
         console.error(error);
         res.status(500).send({ message: "Server error" });
