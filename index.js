@@ -319,7 +319,7 @@ async function run() {
             };
 
             const result = await membershipsCollection.insertOne(memberInfo);
-            console.log(memberInfo);
+            // console.log(memberInfo);
           }
         }
       }
@@ -363,6 +363,22 @@ async function run() {
 
       res.send(result);
     });
+
+    // membership status check api
+    app.get(
+      "/clubs/:clubId/membership-status",
+      verifyFBAdmin,
+      async (req, res) => {
+        const clubId = req.params.clubId;
+        const email = req.decodedEmail;
+        const query = { clubId };
+        console.log(clubId, email);
+        const result = await membershipsCollection.findOne(query);
+        res.send({
+          status: result.status,
+        });
+      }
+    );
 
     await client.db("admin").command({ ping: 1 });
     console.log(
