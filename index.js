@@ -371,11 +371,11 @@ async function run() {
       async (req, res) => {
         const clubId = req.params.clubId;
         const email = req.decodedEmail;
-        const query = { clubId };
+        const query = { clubId, userEmail: email };
         console.log(clubId, email);
         const result = await membershipsCollection.findOne(query);
         res.send({
-          status: result.status,
+          status: result?.status,
         });
       }
     );
