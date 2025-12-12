@@ -331,6 +331,39 @@ async function run() {
       });
     });
 
+    // membership apis
+    app.get("/my-clubs", async (req, res) => {
+      const { email } = req.query;
+      const query = { status: "active" };
+      if (email) query.userEmail = email;
+      // if (status) query.status = status;
+      const memberships = await membershipsCollection.find(query).toArray();
+
+      const clubIds = memberships.map((membership) => membership.clubId);
+
+      const clubs = await clubsCollection
+        .find({
+          _id: { $in: clubIds.map((id) => new ObjectId(id)) },
+        })
+        .toArray();
+
+      const result = clubs.map((club) => {
+        const membership = memberships.find(
+          (m) => m.clubId === club._id.toString()
+        );
+        return {
+          ...club,
+          membership: {
+            membershipStatus: membership.status,
+            joinedAt: membership.joinedAt,
+            paymentId: membership.paymentId,
+          },
+        };
+      });
+
+      res.send(result);
+    });
+
     await client.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
