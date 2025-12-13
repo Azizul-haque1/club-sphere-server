@@ -519,6 +519,63 @@ async function run() {
       res.send(result);
     });
 
+    app.get("/events", async (req, res) => {
+      try {
+        const email = req.query.email;
+
+        if (!email) {
+          return res.status(400).send({ message: "Email is required" });
+        }
+
+        const pipeline = [
+          {
+            $addFields: {
+              clubIdObj: { $toObjectId: "$clubId" },
+            },
+          },
+          {
+            $lookup: {
+              from: "clubs",
+              localField: "clubIdObj",
+              foreignField: "_id",
+              as: "club",
+            },
+          },
+          { $unwind: "$club" },
+          {
+            $match: {
+              "club.managerEmail": email,
+              "club.status": "approved",
+            },
+          },
+
+          {
+            $project: {
+              title: 1,
+              description: 1,
+              clubId: 1,
+              eventDate: 1,
+              location: 1,
+              isPaid: 1,
+              eventFee: 1,
+              maxAttendees: 1,
+              createdAt: 1,
+              clubName: "$club.clubName",
+            },
+          },
+          // {
+          //   $sort: { eventDate: 1 },
+          // },
+        ];
+
+        const events = await eventsCollection.aggregate(pipeline).toArray();
+
+        res.send(events);
+      } catch (error) {
+        res.status(500).send({ message: error.message });
+      }
+    });
+
     await client.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
