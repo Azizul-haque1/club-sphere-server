@@ -178,6 +178,22 @@ async function run() {
       res.send(result);
     });
 
+    // clubs get name by creator for  create event
+    app.get("/clubs/club-name", verifyFBAdmin, async (req, res) => {
+      const { email } = req.query;
+      const query = {};
+      if (email) {
+        query.managerEmail = email;
+        query.status = "approved";
+      }
+
+      const result = await clubsCollection
+        .find(query)
+        .project({ clubName: 1 })
+        .toArray();
+      res.send(result);
+    });
+
     app.get("/clubs/:id/details", async (req, res) => {
       try {
         const id = req.params.id;
