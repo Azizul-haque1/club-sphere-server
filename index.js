@@ -216,6 +216,21 @@ async function run() {
       }
     });
 
+    app.get("/clubs/:email/members", async (req, res) => {
+      const email = req.params.email;
+      const query = { managerEmail: email };
+      const clubs = await clubsCollection.find(query).toArray();
+      const members = await membershipsCollection.find().toArray();
+
+      const result = clubs.map((club) => ({
+        clubId: club._id,
+        clubName: club.clubName,
+        members: members.filter((m) => m.clubId === club._id.toString()),
+      }));
+
+      res.send(result);
+    });
+
     // post api club
     app.post("/clubs", async (req, res) => {
       const club = req.body;
@@ -326,7 +341,6 @@ async function run() {
           }
         }
       }
-
       res.send({
         status: session.status,
         clubName: session.metadata.clubName,
@@ -364,6 +378,69 @@ async function run() {
         };
       });
 
+      res.send(result);
+    });
+
+    app.get("/clubs/members", async (req, res) => {
+      const email = req.query.email;
+      const pipeline = [
+        {
+          $match: {
+            managerEmail: email,
+            status: "approved",
+          },
+        },
+        {
+          $addFields: {
+            clubIdString: { $toString: "$_id" },
+          },
+        },
+        {
+          $lookup: {
+            from: "memberships",
+            localField: "clubIdString",
+            foreignField: "clubId",
+            as: "membership",
+          },
+        },
+        {
+          $unwind: {
+            path: "$membership",
+            preserveNullAndEmptyArrays: true,
+          },
+        },
+        {
+          $lookup: {
+            from: "users",
+            localField: "membership.userEmail",
+            foreignField: "email",
+            as: "memberUser",
+          },
+        },
+        {
+          $unwind: {
+            path: "$memberUser",
+            preserveNullAndEmptyArrays: true,
+          },
+        },
+        {
+          $group: {
+            _id: "$_id",
+            clubName: { $first: "$clubName" },
+            members: {
+              $push: {
+                name: "$memberUser.displayName",
+                memberId: "$memberUser._id",
+                email: "$membership.userEmail",
+                status: "$membership.status",
+                joinDate: "$membership.joinedAt",
+              },
+            },
+          },
+        },
+      ];
+
+      const result = await clubsCollection.aggregate(pipeline).toArray();
       res.send(result);
     });
 
