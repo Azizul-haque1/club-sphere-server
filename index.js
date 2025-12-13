@@ -63,6 +63,7 @@ async function run() {
     const usersCollection = db.collection("users");
     const clubsCollection = db.collection("clubs");
     const membershipsCollection = db.collection("memberships");
+    const eventsCollection = db.collection("events");
 
     // admin role verify
     const verifyAdminRole = async (req, res, next) => {
@@ -485,6 +486,36 @@ async function run() {
         },
       };
       const result = await membershipsCollection.updateOne(query, updateDoc);
+      res.send(result);
+    });
+
+    // event related apis
+
+    app.post("/event", async (req, res) => {
+      const {
+        clubId,
+        title,
+        description,
+        eventDate,
+        location,
+        isPaid,
+        eventFee,
+        maxAttendees,
+      } = req.body;
+
+      const evetInfo = {
+        clubId: clubId,
+        title: title,
+        description: description,
+        eventDate: eventDate,
+        location: location,
+        isPaid: isPaid,
+        eventFee: Number(eventFee) || 0,
+        maxAttendees: Number(maxAttendees) || 0,
+        createdAt: new Date(),
+      };
+
+      const result = await eventsCollection.insertOne(evetInfo);
       res.send(result);
     });
 
