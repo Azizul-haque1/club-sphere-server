@@ -430,7 +430,7 @@ async function run() {
             members: {
               $push: {
                 name: "$memberUser.displayName",
-                memberId: "$memberUser._id",
+                membershipId: "$membership._id",
                 email: "$membership.userEmail",
                 status: "$membership.status",
                 joinDate: "$membership.joinedAt",
@@ -459,6 +459,18 @@ async function run() {
         });
       }
     );
+
+    app.patch("/membership/:membershipId/status", async (req, res) => {
+      const membershipId = req.params.membershipId;
+      const query = { _id: new ObjectId(membershipId) };
+      const updateDoc = {
+        $set: {
+          status: "expired",
+        },
+      };
+      const result = await membershipsCollection.updateOne(query, updateDoc);
+      res.send(result);
+    });
 
     await client.db("admin").command({ ping: 1 });
     console.log(
