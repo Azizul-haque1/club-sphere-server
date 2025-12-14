@@ -63,6 +63,7 @@ async function run() {
     const usersCollection = db.collection("users");
     const clubsCollection = db.collection("clubs");
     const membershipsCollection = db.collection("memberships");
+    const paymentsCollection = db.collection("payments");
     const eventsCollection = db.collection("events");
     const eventRegistrationsCollection = db.collection("eventRegistrations");
 
@@ -353,9 +354,19 @@ async function run() {
               paymentId: session.payment_intent,
               joinedAt: new Date(),
             };
-
             const result = await membershipsCollection.insertOne(memberInfo);
-            // console.log(memberInfo);
+            const paymentsInfo = {
+              userEmail: session.customer_email,
+              amount: session.amount_total / 100,
+              type: "membership",
+              status: session.status,
+              clubName: session.metadata.clubName,
+              paymentId: session.payment_intent,
+              createdAt: new Date(),
+            };
+            const paymentResult = await paymentsCollection.insertOne(
+              paymentsInfo
+            );
           }
         }
       }
@@ -364,6 +375,13 @@ async function run() {
         clubName: session.metadata.clubName,
         amount: session.amount_total / 100,
       });
+    });
+
+    app.get("/my-paymentns", verifyFBAdmin, async (req, res) => {
+      const email = req.decodedEmail;
+      const query = { userEmail: email };
+      const result = await paymentsCollection.find(query).toArray();
+      res.send(result);
     });
 
     // membership apis
@@ -833,7 +851,7 @@ async function run() {
             title: "$ev.title",
             clubName: "$club.clubName",
             status: "$status",
-            data: "$registeredAt",
+            date: "$registeredAt",
           },
         },
       ];
