@@ -503,7 +503,7 @@ async function run() {
         maxAttendees,
       } = req.body;
 
-      const evetInfo = {
+      const eventInfo = {
         clubId: clubId,
         title: title,
         description: description,
@@ -515,7 +515,29 @@ async function run() {
         createdAt: new Date(),
       };
 
-      const result = await eventsCollection.insertOne(evetInfo);
+      const result = await eventsCollection.insertOne(eventInfo);
+      res.send(result);
+    });
+
+    // event update
+    app.patch("/events/:id", verifyFBAdmin, async (req, res) => {
+      const id = req.params.id;
+      const event = req.body;
+      const query = { _id: new ObjectId(id) };
+      const updateDoc = {
+        $set: event,
+      };
+
+  
+
+      const result = await eventsCollection.updateOne(query, updateDoc);
+      res.send(result);
+    });
+
+    app.delete("/events/:id", verifyFBAdmin, async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await eventsCollection.deleteOne(query);
       res.send(result);
     });
 
