@@ -64,6 +64,7 @@ async function run() {
     const clubsCollection = db.collection("clubs");
     const membershipsCollection = db.collection("memberships");
     const eventsCollection = db.collection("events");
+    const eventRegistrationsCollection = db.collection("eventRegistrations");
 
     // admin role verify
     const verifyAdminRole = async (req, res, next) => {
@@ -78,7 +79,7 @@ async function run() {
 
     // test api
     app.get("/usesr/test", verifyFBAdmin, (req, res) => {
-      res.send("text ok");
+      res.send("test ok");
     });
 
     // get user role
@@ -528,8 +529,6 @@ async function run() {
         $set: event,
       };
 
-  
-
       const result = await eventsCollection.updateOne(query, updateDoc);
       res.send(result);
     });
@@ -596,6 +595,126 @@ async function run() {
       } catch (error) {
         res.status(500).send({ message: error.message });
       }
+    });
+
+    app.get("/clubs/:clubId/events", verifyFBAdmin, async (req, res) => {
+      const { clubId } = req.params;
+      const userEmail = req.decodedEmail;
+
+      const member = await membershipsCollection.findOne({
+        clubId,
+        userEmail,
+        status: "active",
+      });
+
+      if (!member) {
+        return res.status(403).json({
+          message: "You are not a member of this club",
+        });
+      }
+
+      const query = {
+        clubId: clubId,
+      };
+      const result = await eventsCollection.find(query).toArray();
+
+      res.send(result);
+    });
+
+    app.get(
+      "/events/:eventId/registrations",
+      verifyFBAdmin,
+      async (req, res) => {
+        const { eventId } = req.params;
+        const email = req.decodedEmail;
+        const query = {
+          _id: new ObjectId(eventId),
+        };
+
+        const event = await eventsCollection.findOne(query);
+        const memberQuery = {
+          clubId: event.clubId,
+          userEmail: email,
+          status: "active",
+        };
+        const member = await membershipsCollection.findOne(memberQuery);
+
+        if (!member) {
+          return res.status(403).json({ message: "Members only" });
+        }
+
+        const registrations = await eventRegistrationsCollection
+          .find({ eventId: event._id })
+          .toArray();
+        res.send(registrations);
+      }
+    );
+
+    app.get("/events/registrations", verifyFBAdmin, async (req, res) => {
+      const email = req.decodedEmail;
+      const result = await eventRegistrationsCollection
+        .find({ userEmail: email })
+        .toArray();
+      res.send(result);
+    });
+
+    app.post("/events/:eventId/register", verifyFBAdmin, async (req, res) => {
+      const { eventId } = req.params;
+      const email = req.decodedEmail;
+
+      const event = await eventsCollection.findOne({
+        _id: new ObjectId(eventId),
+      });
+
+      if (!event) {
+        return res.status(404).json({ message: "Event not found" });
+      }
+      const member = await membershipsCollection.findOne({
+        clubId: event.clubId,
+        userEmail: email,
+        status: "active",
+      });
+
+      if (!member) {
+        return res.status(403).json({ message: "Members only" });
+      }
+      const registered = await eventRegistrationsCollection.findOne({
+        eventId: event._id.toString(),
+        userEmail: email,
+      });
+      if (registered) {
+        return res.status(409).json({ message: "Already registered" });
+      }
+
+      const registration = {
+        eventId: event._id.toString(),
+        clubId: event.clubId,
+        userEmail: email,
+        status: "registered",
+        paymentId: event.isPaid ? null : undefined,
+        registeredAt: new Date(),
+      };
+
+      await eventRegistrationsCollection.insertOne(registration);
+
+      res.json({ success: true, registration });
+    });
+
+    app.patch("/events/:eventId/cancel", verifyFBAdmin, async (req, res) => {
+      const { eventId } = req.params;
+      const email = req.decodedEmail;
+
+      const query = { eventId: eventId, userEmail: email };
+      const updateDoc = { $set: { status: "cancelled" } };
+
+      const result = await eventRegistrationsCollection.updateOne(
+        query,
+        updateDoc
+      );
+      // if (result.matchedCount === 0)
+      //   return res.status(404).json({ message: "Registration not found" });
+
+      res.send(result);
     });
 
     await client.db("admin").command({ ping: 1 });
