@@ -492,6 +492,71 @@ async function run() {
 
     // event related apis
 
+    app.get("/my-clubs/event-registrations", async (req, res) => {
+      const email = req.query.email;
+
+      try {
+        const pipeline = [
+          { $match: { managerEmail: email } },
+
+          {
+            $lookup: {
+              from: "events",
+              let: { clubId: { $toString: "$_id" } },
+              pipeline: [
+                { $match: { $expr: { $eq: ["$clubId", "$$clubId"] } } },
+              ],
+              as: "events",
+            },
+          },
+
+          { $unwind: "$events" },
+
+          // 3️⃣ Events → Registrations
+          {
+            $lookup: {
+              from: "eventRegistrations",
+              let: { eventId: { $toString: "$events._id" } },
+              pipeline: [
+                { $match: { $expr: { $eq: ["$eventId", "$$eventId"] } } },
+              ],
+              as: "registrations",
+            },
+          },
+
+          { $unwind: "$registrations" },
+
+          // 4️⃣ Registration → User
+          {
+            $lookup: {
+              from: "users",
+              localField: "registrations.userEmail",
+              foreignField: "email",
+              as: "user",
+            },
+          },
+
+          { $unwind: "$user" },
+          {
+            $project: {
+              _id: "$registrations._id",
+              eventName: "$events.title",
+              userEmail: "$registrations.userEmail",
+              status: "$registrations.status",
+              registeredAt: "$registrations.registeredAt",
+              userName: "$user.displayName",
+            },
+          },
+        ];
+
+        const result = await clubsCollection.aggregate(pipeline).toArray();
+        res.send(result);
+      } catch (err) {
+        console.error(err);
+        res.status(500).send(err.message);
+      }
+    });
+
     app.post("/event", async (req, res) => {
       const {
         clubId,
@@ -714,6 +779,68 @@ async function run() {
       // if (result.matchedCount === 0)
       //   return res.status(404).json({ message: "Registration not found" });
 
+      res.send(result);
+    });
+
+    app.get("/my-events", verifyFBAdmin, async (req, res) => {
+      const email = req.decodedEmail;
+      const pipeline = [
+        {
+          $match: {
+            userEmail: email,
+          },
+        },
+        {
+          $addFields: { clubIdObj: { $toObjectId: "$clubId" } },
+        },
+
+        {
+          $lookup: {
+            from: "clubs",
+            localField: "clubIdObj",
+            foreignField: "_id",
+            as: "club",
+          },
+        },
+
+        {
+          $unset: "clubIdObj",
+        },
+        {
+          $addFields: { eventIdObj: { $toObjectId: "$eventId" } },
+        },
+
+        {
+          $lookup: {
+            from: "events",
+            localField: "eventIdObj",
+            foreignField: "_id",
+            as: "ev",
+          },
+        },
+        {
+          $unwind: "$ev",
+        },
+        {
+          $unwind: "$club",
+        },
+        {
+          $unset: "eventIdObj",
+        },
+        {
+          $project: {
+            _id: "$_id",
+            title: "$ev.title",
+            clubName: "$club.clubName",
+            status: "$status",
+            data: "$registeredAt",
+          },
+        },
+      ];
+      const result = await eventRegistrationsCollection
+        .aggregate(pipeline)
+        .toArray();
+      console.log(result);
       res.send(result);
     });
 
