@@ -862,6 +862,90 @@ async function run() {
       res.send(result);
     });
 
+    app.get("/events/:id", async (req, res) => {
+      const id = req.params.id;
+      const pipeline = [
+        {
+          $match: { _id: new ObjectId(id) },
+        },
+        {
+          $addFields: { clubIdObj: { $toObjectId: "$clubId" } },
+        },
+        {
+          $lookup: {
+            from: "clubs",
+            localField: "clubIdObj",
+            foreignField: "_id",
+            as: "club",
+          },
+        },
+        { $unwind: "$club" },
+        {
+          $project: {
+            title: 1,
+            description: 1,
+            eventDate: 1,
+            location: 1,
+            isPaid: 1,
+            eventFee: 1,
+            clubName: "$club.clubName",
+          },
+        },
+      ];
+
+      const result = await eventsCollection.aggregate(pipeline).toArray();
+
+      res.send(result[0]);
+    });
+
+    app.get("/upcoming/events", async (req, res) => {
+      const today = new Date().toISOString().split("T")[0];
+      const pipeline = [
+        {
+          $match: {
+            eventDate: { $gte: today },
+          },
+        },
+        {
+          $addFields: {
+            clubIdObj: { $toObjectId: "$clubId" },
+          },
+        },
+        {
+          $lookup: {
+            from: "clubs",
+            localField: "clubIdObj",
+            foreignField: "_id",
+            as: "club",
+          },
+        },
+        {
+          $unwind: {
+            path: "$club",
+            preserveNullAndEmptyArrays: true,
+          },
+        },
+        {
+          $project: {
+            title: 1,
+            description: 1,
+            eventDate: 1,
+            location: 1,
+            isPaid: 1,
+            eventFee: 1,
+            maxAttendees: 1,
+            clubId: 1,
+            clubName: "$club.clubName",
+          },
+        },
+        {
+          $sort: { eventDate: 1 },
+        },
+      ];
+      const result = await eventsCollection.aggregate(pipeline).toArray();
+      res.send(result);
+    });
+
     await client.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
