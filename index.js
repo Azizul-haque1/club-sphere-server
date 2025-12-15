@@ -54,7 +54,7 @@ const verifyFBAdmin = async (req, res, next) => {
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
-    await client.connect();
+    // await client.connect();
     // Send a ping to confirm a successful connection
 
     // database and data collections
@@ -297,6 +297,26 @@ async function run() {
         },
       };
       const result = await clubsCollection.updateOne(query, updateDoc);
+      res.send(result);
+    });
+
+    app.get("/clubs/joined-clubs/stats", verifyFBAdmin, async (req, res) => {
+      const email = req.decodedEmail;
+      const pipeline = [
+        {
+          $match: {
+            userEmail: email,
+            status: "active",
+          },
+        },
+        {
+          $group: {
+            _id: "$status",
+            totalClubs: { $sum: 1 },
+          },
+        },
+      ];
+      const result = await membershipsCollection.aggregate(pipeline).toArray();
       res.send(result);
     });
 
@@ -967,6 +987,115 @@ async function run() {
       const result = await eventsCollection.aggregate(pipeline).toArray();
       res.send(result);
     });
+
+    app.get(
+      "/my-upcoming/registered-events",
+      verifyFBAdmin,
+      async (req, res) => {
+        const today = new Date().toISOString().split("T")[0];
+        const email = req.decodedEmail;
+        const pipeline = [
+          {
+            $match: {
+              userEmail: email,
+              // eventDate: { $gte: today },
+            },
+          },
+          {
+            $addFields: {
+              eventObj: { $toObjectId: "$eventId" },
+            },
+          },
+          {
+            $lookup: {
+              from: "events",
+              localField: "eventObj",
+              foreignField: "_id",
+              as: "event",
+            },
+          },
+          {
+            $unwind: {
+              path: "$event",
+              preserveNullAndEmptyArrays: true,
+            },
+          },
+          {
+            $match: {
+              "event.eventDate": { $gte: today },
+            },
+          },
+
+          {
+            $addFields: {
+              clubIdObj: { $toObjectId: "$clubId" },
+            },
+          },
+          {
+            $lookup: {
+              from: "clubs",
+              localField: "clubIdObj",
+              foreignField: "_id",
+              as: "club",
+            },
+          },
+          {
+            $unwind: {
+              path: "$club",
+              preserveNullAndEmptyArrays: true,
+            },
+          },
+          {
+            $addFields: {
+              eventIdString: { $toString: "$_id" },
+            },
+          },
+
+          {
+            $project: {
+              title: "$event.title",
+              description: 1,
+              eventDate: "$event.eventDate",
+              clubName: "$club.clubName",
+            },
+          },
+          {
+            $sort: { eventDate: 1 },
+          },
+        ];
+        const result = await eventRegistrationsCollection
+          .aggregate(pipeline)
+          .toArray();
+        res.send(result);
+      }
+    );
+
+    app.get(
+      "/events/registered-evnet/stats",
+      // verifyFBAdmin,
+      async (req, res) => {
+        // const email = req.decodedEmail;
+        const email = "chloewong@gmail.com";
+        const pipeline = [
+          {
+            $match: {
+              userEmail: email,
+              status: "registered",
+            },
+          },
+          {
+            $group: {
+              _id: "$status",
+              totalEvents: { $sum: 1 },
+            },
+          },
+        ];
+        const result = await eventRegistrationsCollection
+          .aggregate(pipeline)
+          .toArray();
+        res.send(result);
+      }
+    );
 
     await client.db("admin").command({ ping: 1 });
     console.log(
