@@ -380,6 +380,7 @@ async function run() {
               amount: session.amount_total / 100,
               type: "membership",
               status: session.status,
+              clubId: session.metadata.clubId,
               clubName: session.metadata.clubName,
               paymentId: session.payment_intent,
               createdAt: new Date(),
@@ -1096,6 +1097,111 @@ async function run() {
         res.send(result);
       }
     );
+
+    // stats manager
+
+    app.get("/manager/overview", verifyFBAdmin, async (req, res) => {
+      // const managerEmail = req.decodedEmail;
+      const managerEmail = req.decodedEmail;
+      const pipeline = [
+        // 1️⃣ only manager's clubs
+        {
+          $match: {
+            managerEmail,
+            status: "approved",
+          },
+        },
+
+        // 2️⃣ convert club _id → string
+        {
+          $addFields: {
+            clubIdString: { $toString: "$_id" },
+          },
+        },
+
+        // 3️⃣ lookup members
+        {
+          $lookup: {
+            from: "memberships",
+            localField: "clubIdString",
+            foreignField: "clubId",
+            as: "members",
+          },
+        },
+
+        // 4️⃣ lookup events
+        {
+          $lookup: {
+            from: "events",
+            localField: "clubIdString",
+            foreignField: "clubId",
+            as: "events",
+          },
+        },
+
+        // 5️⃣ lookup payments
+        {
+          $lookup: {
+            from: "payments",
+            localField: "clubIdString",
+            foreignField: "clubId",
+            as: "payments",
+          },
+        },
+
+        // 6️⃣ group summary
+        {
+          $group: {
+            _id: null,
+
+            totalClubs: { $sum: 1 },
+
+            totalMembers: {
+              $sum: {
+                $size: {
+                  $filter: {
+                    input: "$members",
+                    as: "m",
+                    cond: { $eq: ["$$m.status", "active"] },
+                  },
+                },
+              },
+            },
+
+            totalEvents: {
+              $sum: { $size: "$events" },
+            },
+
+            totalPayments: {
+              $sum: {
+                $sum: "$payments.amount",
+              },
+            },
+          },
+        },
+
+        // 7️⃣ clean output
+        {
+          $project: {
+            _id: 0,
+            totalClubs: 1,
+            totalMembers: 1,
+            totalEvents: 1,
+            totalPayments: 1,
+          },
+        },
+      ];
+
+      const result = await clubsCollection.aggregate(pipeline).toArray();
+      res.send(
+        result[0] || {
+          totalClubs: 0,
+          totalMembers: 0,
+          totalEvents: 0,
+          totalPayments: 0,
+        }
+      );
+    });
 
     await client.db("admin").command({ ping: 1 });
     console.log(
