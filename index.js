@@ -741,6 +741,27 @@ async function run() {
       res.send(result);
     });
 
+    app.get(
+      "/events/:eventId/registration/",
+      verifyFBAdmin,
+      async (req, res) => {
+        const eventId = req.params.eventId;
+        const email = req.decodedEmail;
+        const query = {
+          eventId,
+          userEmail: email,
+          status: "registered",
+        };
+        const result = await eventRegistrationsCollection.findOne(query);
+        if (!result) {
+          return res.send({ status: "" });
+        }
+        res.send({ status: result.status });
+
+        console.log({ status: result.status });
+      }
+    );
+
     app.post("/events/:eventId/register", verifyFBAdmin, async (req, res) => {
       const { eventId } = req.params;
       const email = req.decodedEmail;
@@ -889,6 +910,7 @@ async function run() {
             isPaid: 1,
             eventFee: 1,
             clubName: "$club.clubName",
+            clubId: "$club._id",
           },
         },
       ];
