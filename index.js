@@ -120,7 +120,9 @@ async function run() {
     );
 
     app.get("/users", verifyFBAdmin, verifyAdminRole, async (req, res) => {
-      const result = await usersCollection.find().toArray();
+      const result = await usersCollection
+        .find({ $or: [{ role: "member" }, { role: "manager" }] })
+        .toArray();
       res.send(result);
     });
 
@@ -1073,10 +1075,9 @@ async function run() {
 
     app.get(
       "/events/registered-evnet/stats",
-      // verifyFBAdmin,
+      verifyFBAdmin,
       async (req, res) => {
-        // const email = req.decodedEmail;
-        const email = "chloewong@gmail.com";
+        const email = req.decodedEmail;
         const pipeline = [
           {
             $match: {
@@ -1201,6 +1202,134 @@ async function run() {
           totalPayments: 0,
         }
       );
+    });
+
+    // admin stats
+    
+    app.get(
+      "/admin/clubs/members-count",
+      verifyFBAdmin,
+      verifyAdminRole,
+      async (req, res) => {
+        try {
+          const pipeline = [
+            {
+              $match: {
+                status: "approved",
+              },
+            },
+
+            {
+              $addFields: {
+                clubIdString: { $toString: "$_id" },
+              },
+            },
+            {
+              $lookup: {
+                from: "memberships",
+                localField: "clubIdString",
+                foreignField: "clubId",
+                as: "memberships",
+              },
+            },
+
+            {
+              $project: {
+                _id: 0,
+                club: "$clubName",
+                members: {
+                  $size: {
+                    $filter: {
+                      input: "$memberships",
+                      as: "m",
+                      cond: { $eq: ["$$m.status", "active"] },
+                    },
+                  },
+                },
+              },
+            },
+
+            {
+              $sort: { members: -1 },
+            },
+          ];
+
+          const result = await clubsCollection.aggregate(pipeline).toArray();
+          res.send(result);
+        } catch (err) {
+          res.status(500).send({ message: err.message });
+        }
+      }
+    );
+
+    app.get("/admin/stats/users", async (req, res) => {
+      const pipeline = [
+        {
+          $count: "totoalUser",
+        },
+      ];
+      const result = await usersCollection.aggregate(pipeline).toArray();
+      res.send(result[0]);
+    });
+
+    app.get("/admin/stats/clubs", async (req, res) => {
+      const pipeline = [
+        { $group: { _id: "$status", count: { $sum: 1 } } },
+        {
+          $group: {
+            _id: null,
+            approved: {
+              $sum: { $cond: [{ $eq: ["$_id", "approved"] }, "$count", 0] },
+            },
+            pending: {
+              $sum: { $cond: [{ $eq: ["$_id", "pending"] }, "$count", 0] },
+            },
+            rejected: {
+              $sum: { $cond: [{ $eq: ["$_id", "rejected"] }, "$count", 0] },
+            },
+            total: { $sum: "$count" },
+          },
+        },
+        {
+          $project: { _id: 0, approved: 1, rejected: 1, pending: 1, total: 1 },
+        },
+      ];
+
+      const result = await clubsCollection.aggregate(pipeline).toArray();
+      res.send(result[0]);
+    });
+
+    app.get("/admin/stats/memberships", async (req, res) => {
+      const pipeline = [
+        {
+          $count: "totalMemberships",
+        },
+      ];
+      const result = await membershipsCollection.aggregate(pipeline).toArray();
+      res.send(result[0]);
+    });
+
+    app.get("/admin/stats/events", async (req, res) => {
+      const pipeline = [
+        {
+          $count: "totalEvents",
+        },
+      ];
+      const result = await eventsCollection.aggregate(pipeline).toArray();
+      res.send(result[0]);
+    });
+
+    app.get("/admin/stats/payments", async (req, res) => {
+      const pipeline = [
+        {
+          $group: {
+            _id: null,
+            totalPayments: { $sum: "$amount" },
+          },
+        },
+      ];
+      const result = await paymentsCollection.aggregate(pipeline).toArray();
+      res.send({ totalPayments: result[0].totalPayments || 0 });
     });
 
     await client.db("admin").command({ ping: 1 });
