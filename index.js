@@ -155,6 +155,34 @@ async function run() {
 
     // get clubs api
     app.get("/clubs", async (req, res) => {
+      try {
+        const { status, search, category } = req.query;
+        const query = {};
+        if (status) {
+          query.status = status;
+        }
+        if (search) {
+          query.clubName = {
+            $regex: search,
+            $options: "i", // case-insensitive
+          };
+        }
+
+        if (category) {
+          query.category = category;
+        }
+        const result = await clubsCollection
+          .find(query)
+          .sort({ createdAt: -1 })
+          .toArray();
+        res.send(result);
+      } catch (error) {
+        console.log(error);
+        res.send(error);
+      }
+    });
+
+    app.get("/featured/clubs", async (req, res) => {
       const status = req.query.status;
       const query = {};
       if (status) {
@@ -163,6 +191,7 @@ async function run() {
       const result = await clubsCollection
         .find(query)
         .sort({ createdAt: -1 })
+        .limit(6)
         .toArray();
       res.send(result);
     });
@@ -288,19 +317,31 @@ async function run() {
       res.send(result);
     });
 
-    // patch club status
-    app.patch("/clubs/:id/status", async (req, res) => {
+    app.delete("/clubs/:id", verifyFBAdmin, async (req, res) => {
       const id = req.params.id;
-      const status = req.body.status;
       const query = { _id: new ObjectId(id) };
-      const updateDoc = {
-        $set: {
-          status: status,
-        },
-      };
-      const result = await clubsCollection.updateOne(query, updateDoc);
+      const result = await clubsCollection.deleteOne(query);
       res.send(result);
     });
+
+    // patch club status
+    app.patch(
+      "/clubs/:id/status",
+      verifyFBAdmin,
+      verifyAdminRole,
+      async (req, res) => {
+        const id = req.params.id;
+        const status = req.body.status;
+        const query = { _id: new ObjectId(id) };
+        const updateDoc = {
+          $set: {
+            status: status,
+          },
+        };
+        const result = await clubsCollection.updateOne(query, updateDoc);
+        res.send(result);
+      }
+    );
 
     app.get("/clubs/joined-clubs/stats", verifyFBAdmin, async (req, res) => {
       const email = req.decodedEmail;
@@ -519,6 +560,22 @@ async function run() {
       }
     );
 
+    app.post("/free-clubs/membershsip", verifyFBAdmin, async (req, res) => {
+      const memberInfo = req.body;
+      console.log(memberInfo);
+      const query = {
+        clubId: memberInfo.clubId,
+        userEmail: memberInfo.userEmail,
+      };
+      const exist = await membershipsCollection.findOne(query);
+      if (exist) {
+        return res.send({ message: "already exists" });
+      }
+
+      const result = await membershipsCollection.insertOne(memberInfo);
+      res.send(result);
+    });
+
     app.patch("/membership/:membershipId/status", async (req, res) => {
       const membershipId = req.params.membershipId;
       const query = { _id: new ObjectId(membershipId) };
@@ -598,7 +655,7 @@ async function run() {
       }
     });
 
-    app.post("/event", async (req, res) => {
+    app.post("/event", verifyFBAdmin, async (req, res) => {
       const {
         clubId,
         title,
@@ -991,6 +1048,57 @@ async function run() {
       res.send(result);
     });
 
+    app.get("/featured/upcoming/events", async (req, res) => {
+      const today = new Date().toISOString().split("T")[0];
+      const pipeline = [
+        {
+          $match: {
+            eventDate: { $gte: today },
+          },
+        },
+        {
+          $addFields: {
+            clubIdObj: { $toObjectId: "$clubId" },
+          },
+        },
+        {
+          $lookup: {
+            from: "clubs",
+            localField: "clubIdObj",
+            foreignField: "_id",
+            as: "club",
+          },
+        },
+        {
+          $unwind: {
+            path: "$club",
+            preserveNullAndEmptyArrays: true,
+          },
+        },
+        {
+          $project: {
+            title: 1,
+            description: 1,
+            eventDate: 1,
+            location: 1,
+            isPaid: 1,
+            eventFee: 1,
+            maxAttendees: 1,
+            clubId: 1,
+            clubName: "$club.clubName",
+          },
+        },
+        {
+          $sort: { eventDate: 1 },
+        },
+        {
+          $limit: 6,
+        },
+      ];
+      const result = await eventsCollection.aggregate(pipeline).toArray();
+      res.send(result);
+    });
+
     app.get(
       "/my-upcoming/registered-events",
       verifyFBAdmin,
@@ -1205,7 +1313,7 @@ async function run() {
     });
 
     // admin stats
-    
+
     app.get(
       "/admin/clubs/members-count",
       verifyFBAdmin,
@@ -1262,75 +1370,108 @@ async function run() {
       }
     );
 
-    app.get("/admin/stats/users", async (req, res) => {
-      const pipeline = [
-        {
-          $count: "totoalUser",
-        },
-      ];
-      const result = await usersCollection.aggregate(pipeline).toArray();
-      res.send(result[0]);
-    });
-
-    app.get("/admin/stats/clubs", async (req, res) => {
-      const pipeline = [
-        { $group: { _id: "$status", count: { $sum: 1 } } },
-        {
-          $group: {
-            _id: null,
-            approved: {
-              $sum: { $cond: [{ $eq: ["$_id", "approved"] }, "$count", 0] },
-            },
-            pending: {
-              $sum: { $cond: [{ $eq: ["$_id", "pending"] }, "$count", 0] },
-            },
-            rejected: {
-              $sum: { $cond: [{ $eq: ["$_id", "rejected"] }, "$count", 0] },
-            },
-            total: { $sum: "$count" },
+    app.get(
+      "/admin/stats/users",
+      verifyFBAdmin,
+      verifyAdminRole,
+      async (req, res) => {
+        const pipeline = [
+          {
+            $count: "totoalUser",
           },
-        },
-        {
-          $project: { _id: 0, approved: 1, rejected: 1, pending: 1, total: 1 },
-        },
-      ];
+        ];
+        const result = await usersCollection.aggregate(pipeline).toArray();
+        res.send(result[0]);
+      }
+    );
 
-      const result = await clubsCollection.aggregate(pipeline).toArray();
-      res.send(result[0]);
-    });
-
-    app.get("/admin/stats/memberships", async (req, res) => {
-      const pipeline = [
-        {
-          $count: "totalMemberships",
-        },
-      ];
-      const result = await membershipsCollection.aggregate(pipeline).toArray();
-      res.send(result[0]);
-    });
-
-    app.get("/admin/stats/events", async (req, res) => {
-      const pipeline = [
-        {
-          $count: "totalEvents",
-        },
-      ];
-      const result = await eventsCollection.aggregate(pipeline).toArray();
-      res.send(result[0]);
-    });
-
-    app.get("/admin/stats/payments", async (req, res) => {
-      const pipeline = [
-        {
-          $group: {
-            _id: null,
-            totalPayments: { $sum: "$amount" },
+    app.get(
+      "/admin/stats/clubs",
+      verifyFBAdmin,
+      verifyAdminRole,
+      async (req, res) => {
+        const pipeline = [
+          { $group: { _id: "$status", count: { $sum: 1 } } },
+          {
+            $group: {
+              _id: null,
+              approved: {
+                $sum: { $cond: [{ $eq: ["$_id", "approved"] }, "$count", 0] },
+              },
+              pending: {
+                $sum: { $cond: [{ $eq: ["$_id", "pending"] }, "$count", 0] },
+              },
+              rejected: {
+                $sum: { $cond: [{ $eq: ["$_id", "rejected"] }, "$count", 0] },
+              },
+              total: { $sum: "$count" },
+            },
           },
-        },
-      ];
-      const result = await paymentsCollection.aggregate(pipeline).toArray();
-      res.send({ totalPayments: result[0].totalPayments || 0 });
-    });
+          {
+            $project: {
+              _id: 0,
+              approved: 1,
+              rejected: 1,
+              pending: 1,
+              total: 1,
+            },
+          },
+        ];
+
+        const result = await clubsCollection.aggregate(pipeline).toArray();
+        res.send(result[0]);
+      }
+    );
+
+    app.get(
+      "/admin/stats/memberships",
+      verifyFBAdmin,
+      verifyAdminRole,
+      async (req, res) => {
+        const pipeline = [
+          {
+            $count: "totalMemberships",
+          },
+        ];
+        const result = await membershipsCollection
+          .aggregate(pipeline)
+          .toArray();
+        res.send(result[0]);
+      }
+    );
+
+    app.get(
+      "/admin/stats/events",
+      verifyFBAdmin,
+      verifyAdminRole,
+      async (req, res) => {
+        const pipeline = [
+          {
+            $count: "totalEvents",
+          },
+        ];
+        const result = await eventsCollection.aggregate(pipeline).toArray();
+        res.send(result[0]);
+      }
+    );
+
+    app.get(
+      "/admin/stats/payments",
+      verifyFBAdmin,
+      verifyAdminRole,
+      async (req, res) => {
+        const pipeline = [
+          {
+            $group: {
+              _id: null,
+              totalPayments: { $sum: "$amount" },
+            },
+          },
+        ];
+        const result = await paymentsCollection.aggregate(pipeline).toArray();
+        res.send({ totalPayments: result[0].totalPayments || 0 });
+      }
+    );
 
     await client.db("admin").command({ ping: 1 });
     console.log(
