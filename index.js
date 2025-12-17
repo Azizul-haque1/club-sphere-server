@@ -79,6 +79,16 @@ async function run() {
       }
       next();
     };
+    // admin role verify
+    const verifyMangerRole = async (req, res, next) => {
+      const email = req.decodedEmail;
+      const query = { email };
+      const user = await usersCollection.findOne(query);
+      if (!user || user.role !== "manager") {
+        return res.status(403).send({ message: "forbidden access" });
+      }
+      next();
+    };
 
     // test api
     app.get("/usesr/test", (req, res) => {
@@ -158,7 +168,7 @@ async function run() {
     // get clubs api
     app.get("/clubs", async (req, res) => {
       try {
-        const { status, search, category } = req.query;
+        const { status, search, category, sort } = req.query;
         const query = {};
         if (status) {
           query.status = status;
@@ -170,12 +180,26 @@ async function run() {
           };
         }
 
+        console.log(sort);
+
+        let sortOption = { createdAt: -1 };
+
+        if (sort === "oldest") {
+          sortOption = { createdAt: 1 };
+        }
+        if (sort === "feeHigh") {
+          sortOption = { membershipFee: -1 };
+        }
+        if (sort === "feeLow") {
+          sortOption = { membershipFee: 1 };
+        }
+
         if (category) {
           query.category = category;
         }
         const result = await clubsCollection
           .find(query)
-          .sort({ createdAt: -1 })
+          .sort(sortOption)
           .toArray();
         res.send(result);
       } catch (error) {
@@ -284,7 +308,7 @@ async function run() {
     });
 
     // post api club
-    app.post("/clubs", async (req, res) => {
+    app.post("/clubs", verifyFBAdmin, async (req, res) => {
       const club = req.body;
       club.createdAt = new Date();
       club.status = "pending";
@@ -450,6 +474,16 @@ async function run() {
       res.send(result);
     });
 
+    app.get(
+      "/all-paymentns/view",
+      verifyFBAdmin,
+      verifyAdminRole,
+      async (req, res) => {
+        const result = await paymentsCollection.find().toArray();
+        res.send(result);
+      }
+    );
+
     // membership apis
     app.get("/my-clubs", async (req, res) => {
       const { email } = req.query;
@@ -546,7 +580,6 @@ async function run() {
       res.send(result);
     });
 
-
     app.get(
       "/clubs/:clubId/membership-status",
       verifyFBAdmin,
@@ -590,8 +623,6 @@ async function run() {
       res.send(result);
     });
 
-
-
     app.get("/my-clubs/event-registrations", async (req, res) => {
       const email = req.query.email;
 
@@ -612,7 +643,6 @@ async function run() {
 
           { $unwind: "$events" },
 
-
           {
             $lookup: {
               from: "eventRegistrations",
@@ -626,7 +656,6 @@ async function run() {
 
           { $unwind: "$registrations" },
 
-      
           {
             $lookup: {
               from: "users",
@@ -1222,7 +1251,6 @@ async function run() {
           },
         },
 
-
         {
           $addFields: {
             clubIdString: { $toString: "$_id" },
@@ -1237,7 +1265,6 @@ async function run() {
             as: "members",
           },
         },
-
 
         {
           $lookup: {
