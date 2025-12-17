@@ -4,6 +4,8 @@ var admin = require("firebase-admin");
 const express = require("express");
 const cors = require("cors");
 const app = express();
+// const jwt = require("jsonwebtoken");
+
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const port = process.env.PORT || 3000;
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
@@ -79,7 +81,7 @@ async function run() {
     };
 
     // test api
-    app.get("/usesr/test", verifyFBAdmin, (req, res) => {
+    app.get("/usesr/test", (req, res) => {
       res.send("test ok");
     });
 
@@ -544,7 +546,7 @@ async function run() {
       res.send(result);
     });
 
-    // membership status check api
+
     app.get(
       "/clubs/:clubId/membership-status",
       verifyFBAdmin,
@@ -588,7 +590,7 @@ async function run() {
       res.send(result);
     });
 
-    // event related apis
+
 
     app.get("/my-clubs/event-registrations", async (req, res) => {
       const email = req.query.email;
@@ -610,7 +612,7 @@ async function run() {
 
           { $unwind: "$events" },
 
-          // 3️⃣ Events → Registrations
+
           {
             $lookup: {
               from: "eventRegistrations",
@@ -624,7 +626,7 @@ async function run() {
 
           { $unwind: "$registrations" },
 
-          // 4️⃣ Registration → User
+      
           {
             $lookup: {
               from: "users",
@@ -1213,7 +1215,6 @@ async function run() {
       // const managerEmail = req.decodedEmail;
       const managerEmail = req.decodedEmail;
       const pipeline = [
-        // 1️⃣ only manager's clubs
         {
           $match: {
             managerEmail,
@@ -1221,14 +1222,13 @@ async function run() {
           },
         },
 
-        // 2️⃣ convert club _id → string
+
         {
           $addFields: {
             clubIdString: { $toString: "$_id" },
           },
         },
 
-        // 3️⃣ lookup members
         {
           $lookup: {
             from: "memberships",
@@ -1238,7 +1238,7 @@ async function run() {
           },
         },
 
-        // 4️⃣ lookup events
+
         {
           $lookup: {
             from: "events",
@@ -1248,7 +1248,6 @@ async function run() {
           },
         },
 
-        // 5️⃣ lookup payments
         {
           $lookup: {
             from: "payments",
@@ -1258,7 +1257,6 @@ async function run() {
           },
         },
 
-        // 6️⃣ group summary
         {
           $group: {
             _id: null,
